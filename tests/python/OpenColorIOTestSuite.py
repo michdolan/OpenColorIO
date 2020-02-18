@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright Contributors to the OpenColorIO Project.
 
-import PyOpenColorIO as OCIO
 import unittest
 import os
 import sys
@@ -28,7 +27,19 @@ elif sys.platform == 'darwin':
         opencolorio_dir, os.getenv('DYLD_LIBRARY_PATH', ''))
 
 sys.path.insert(0, pyopencolorio_dir)
+import PyOpenColorIO as OCIO
 
+import ColorSpaceTest
+import CDLTransformTest
+from MainTest import *
+from ConstantsTest import *
+from ConfigTest import *
+from ContextTest import *
+from LookTest import *
+from GpuShaderDescTest import *
+from Baker import *
+from TransformsTest import *
+from RangeTransformTest import *
 
 def suite():
     """Load unittest.TestCase objects from *Test.py files within ./tests/Python
@@ -38,11 +49,29 @@ def suite():
     """
 
     # top level directory cached on loader instance
-    this_dir = os.path.dirname(__file__)
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
-    package_tests = loader.discover(start_dir=this_dir, pattern='*Test.py')
-    suite.addTests(package_tests)
+
+    suite.addTest(loader.loadTestsFromModule(ColorSpaceTest))
+    suite.addTest(loader.loadTestsFromModule(CDLTransformTest))
+    suite.addTest(MainTest("test_interface"))
+    suite.addTest(ConstantsTest("test_interface"))
+    suite.addTest(ConfigTest("test_interface"))
+    suite.addTest(ConfigTest("test_is_editable"))
+    suite.addTest(ContextTest("test_interface"))
+    suite.addTest(LookTest("test_interface"))
+    suite.addTest(RangeTransformTest("test_interface"))
+    suite.addTest(RangeTransformTest("test_equality"))
+    suite.addTest(RangeTransformTest("test_validation"))
+    suite.addTest(TransformsTest("test_interface"))
+
+    # Processor
+    # ProcessorMetadata
+    suite.addTest(GpuShaderDescTest("test_interface"))
+    suite.addTest(BakerTest("test_interface", opencolorio_sse))
+    # PackedImageDesc
+    # PlanarImageDesc
+
     return suite
 
 
