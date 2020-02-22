@@ -1,3 +1,4 @@
+# https://github.com/colour-science/OpenColorIO-Configs/blob/feature/aces-1.1-config/aces_1.1/config.ocio
 ACES_1_1_CONFIG = """ocio_profile_version: 1
 
 search_path: luts
