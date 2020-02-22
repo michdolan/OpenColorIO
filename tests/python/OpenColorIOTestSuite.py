@@ -4,7 +4,7 @@
 import unittest
 import os
 import sys
-from fnmatch import filter as fnfilter
+from glob import glob
 
 build_location = sys.argv[1]
 
@@ -30,8 +30,6 @@ elif sys.platform == 'darwin':
 sys.path.insert(0, pyopencolorio_dir)
 import PyOpenColorIO as OCIO
 
-from BakerTest import *
-
 def suite():
     """Load unittest.TestCase objects from *Test.py files within ./tests/Python
 
@@ -43,18 +41,14 @@ def suite():
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
 
-    this_dir = os.path.dirname(__file__)
-    test_modules = [filename.replace('.py', '') for filename in fnfilter(
-        os.listdir(this_dir), '*Test.py')]
-    map(__import__, test_modules)
-
-    for mod in [sys.modules[modname] for modname in test_modules]:
-        try:
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    for filename in glob('%s/*Test.py' % this_dir):
+        name = filename.replace('.py', '').split('/')[-1]
+        mod = __import__(name)
+        if mod.__name__ == 'BakerTest':
+            suite.addTest(mod.BakerTest("test_interface", opencolorio_sse))
+        else:
             suite.addTest(loader.loadTestsFromModule(mod))
-        except TypeError:
-            if mod.__name__ == 'BakerTest':
-                suite.addTest(BakerTest("test_interface", opencolorio_sse))
-
     return suite
 
 
