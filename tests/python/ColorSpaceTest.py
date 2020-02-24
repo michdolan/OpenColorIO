@@ -12,6 +12,7 @@ from Constants import SIMPLE_CONFIG
 def generate_name(digits):
     """
     Randomly generate ASCII value 32 to 126 upto specified digit amount.
+    First and last char will not contain space letter.
     https://www.asciichart.com
 
     :param digits: Number of digits in the name.
@@ -21,170 +22,52 @@ def generate_name(digits):
     """
 
     name = ''
-    for x in range(0, randint(1, digits)):
-        name += chr(randint(32, 127))
+    last_digit = randint(1, digits)
+    for x in range(0, last_digit):
+        if x == 0 or x == last_digit:
+            name += chr(randint(33, 127))
+        else:
+            name += chr(randint(32, 127))
     return name
 
 
 class ColorSpaceTest(unittest.TestCase):
-    def setUp(self):
-        """
-        Set up self.cs as OCIO.ColorSpace and OCIO.LogTransform objects.
-        """
-
-        self.cs = OCIO.ColorSpace()
-        self.lt = OCIO.LogTransform()
-
-    def tearDown(self):
-        """
-        Clear the self.cs variable.
-        """
-
-        self.cs = None
-        self.lt = None
-
-    def test_editable(self):
-        """
-        Test the isEditable() and createEditableCopy() methods.
-        """
-
-        # Basic test
-        self.assertTrue(self.cs.isEditable())
-
-        # Getter check
-        transform_base = 10
-        self.lt.setBase(transform_base)
-        self.cs.setTransform(self.lt, OCIO.COLORSPACE_DIR_TO_REFERENCE)
-        ott = self.cs.getTransform(OCIO.COLORSPACE_DIR_TO_REFERENCE)
-        self.assertFalse(ott.isEditable())
-        with self.assertRaises(OCIO.Exception):
-            ott.setBase(20)
-
-        cs_copy = self.cs.createEditableCopy()
-        self.assertTrue(cs_copy.isEditable())
-        self.assertIsInstance(cs_copy, OCIO.ColorSpace)
-        self.assertIsNot(cs_copy, self.cs)
-
-    def test_name(self):
-        """
-        Test the setName() and getName() methods.
-        """
-
-        # Basic test
-        self.cs.setName("mynewcolspace")
-        self.assertEqual("mynewcolspace", self.cs.getName())
-
-        # Random string tests
-        for i in range(1, 10):
-            name = generate_name(20)
-            self.cs.setName(name)
-            self.assertEqual(name, self.cs.getName())
-
-    def test_family(self):
-        """
-        Test the setFamily() and getFamily() methods.
-        """
-
-        # Basic test
-        self.cs.setFamily("fam1")
-        self.assertEqual("fam1", self.cs.getFamily())
-
-        # Random string tests
-        for i in range(1, 10):
-            name = generate_name(20)
-            self.cs.setFamily(name)
-            self.assertEqual(name, self.cs.getFamily())
-
-    def test_equality(self):
-        """
-        Test the setEqualityGroup() and getEqualityGroup() methods.
-        """
-
-        # Basic test
-        self.cs.setEqualityGroup("match1")
-        self.assertEqual("match1", self.cs.getEqualityGroup())
-
-        # Random string tests
-        for i in range(1, 10):
-            name = generate_name(20)
-            self.cs.setEqualityGroup(name)
-            self.assertEqual(name, self.cs.getEqualityGroup())
-
-    def test_description(self):
-        """
-        Test the setDescription() and getDescription() methods.
-        """
-
-        # Basic test
-        self.cs.setDescription("this is a test")
-        self.assertEqual("this is a test", self.cs.getDescription())
-
-        # Random string tests
-        for i in range(1, 10):
-            name = generate_name(20)
-            self.cs.setDescription(name)
-            self.assertEqual(name, self.cs.getDescription())
-
-    def test_bitdepth(self):
-        """
-        Test the setBitDepth() and getBitDepth() methods.
-        """
-
-        # Known constants tests
-        for i, bit_depth in enumerate(OCIO.BitDepth.__members__.values()):
-            self.assertEqual(bit_depth.name, OCIO.BitDepth(i).name)
-            self.cs.setBitDepth(bit_depth)
-            self.assertEqual(OCIO.BitDepth(bit_depth), self.cs.getBitDepth())
-
-        # Wrong type tests
-        for i in range(0, 10):
-            name = generate_name(20)
-            with self.assertRaises(TypeError):
-                self.cs.setBitDepth(name)
-        with self.assertRaises(TypeError):
-            self.cs.setBitDepth(None)
-
-    def test_data(self):
-        """
-        Test the setIsData() and getIsData() methods.
-        """
-
-        # Boolean tests
-        is_datas = [True, False]
-        for is_data in is_datas:
-            self.cs.setIsData(is_data)
-            self.assertEqual(is_data, self.cs.isData())
-
-        # Wrong type tests
-        wrong_is_datas = [['test'],
-                          'test']
-        for wrong_is_data in wrong_is_datas:
-            with self.assertRaises(TypeError):
-                self.cs.setIsData(wrong_is_data)
+    main_cs = OCIO.ColorSpace()
+    main_lt = OCIO.LogTransform(10)
 
     def test_allocation(self):
         """
         Test the setAllocation() and getAllocation() methods.
         """
 
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setAllocation(OCIO.ALLOCATION_LG2)
+
+        cs = OCIO.ColorSpace()
+
         # Known constants tests
         for i, allocation in enumerate(OCIO.Allocation.__members__.values()):
             self.assertEqual(allocation.name, OCIO.Allocation(i).name)
-            self.cs.setAllocation(allocation)
-            self.assertEqual(allocation, self.cs.getAllocation())
+            cs.setAllocation(allocation)
+            self.assertEqual(allocation, cs.getAllocation())
 
         # Wrong type tests
         for i in range(0, 10):
             name = generate_name(20)
             with self.assertRaises(TypeError):
-                self.cs.setAllocation(name)
+                cs.setAllocation(name)
         with self.assertRaises(TypeError):
-            self.cs.setAllocation(None)
+            cs.setAllocation(None)
 
     def test_allocation_vars(self):
         """
         Test the setAllocationVars() and getAllocationVars() methods.
         """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setAllocationVars([0.1, 0.2, 0.3])
+
+        cs = OCIO.ColorSpace()
 
         # Array length tests
         alloc_var = []
@@ -193,11 +76,10 @@ class ColorSpaceTest(unittest.TestCase):
             alloc_var.append(float('0.%i' % i))
             if i < 2 or i > 3:
                 with self.assertRaises(OCIO.Exception):
-                    self.cs.setAllocationVars(alloc_var)
+                    cs.setAllocationVars(alloc_var)
             else:
-                self.cs.setAllocationVars(alloc_var)
-                self.assertEqual(len(alloc_var), len(
-                    self.cs.getAllocationVars()))
+                cs.setAllocationVars(alloc_var)
+                self.assertEqual(len(alloc_var), len(cs.getAllocationVars()))
 
         # Wrong type tests
         wrong_alloc_vars = [['test'],
@@ -206,35 +88,31 @@ class ColorSpaceTest(unittest.TestCase):
                             1]
         for wrong_alloc_var in wrong_alloc_vars:
             with self.assertRaises(TypeError):
-                self.cs.setAllocationVars(wrong_alloc_var)
+                cs.setAllocationVars(wrong_alloc_var)
 
-    def test_transform(self):
+    def test_bitdepth(self):
         """
-        Test the setTransform() and getTransform() methods.
+        Test the setBitDepth() and getBitDepth() methods.
         """
 
-        transform_base = 10
-        self.lt.setBase(transform_base)
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setBitDepth(OCIO.BIT_DEPTH_F16)
+
+        cs = OCIO.ColorSpace()
 
         # Known constants tests
-        for i, direction in enumerate(
-                OCIO.ColorSpaceDirection.__members__.values()):
-            self.assertEqual(direction.name, OCIO.ColorSpaceDirection(i).name)
-            if direction == OCIO.COLORSPACE_DIR_UNKNOWN:
-                with self.assertRaises(OCIO.Exception):
-                    self.cs.setTransform(self.lt, direction)
-            else:
-                self.cs.setTransform(self.lt, direction)
+        for i, bit_depth in enumerate(OCIO.BitDepth.__members__.values()):
+            self.assertEqual(bit_depth.name, OCIO.BitDepth(i).name)
+            cs.setBitDepth(bit_depth)
+            self.assertEqual(OCIO.BitDepth(bit_depth), cs.getBitDepth())
 
-            if direction == OCIO.COLORSPACE_DIR_UNKNOWN:
-                with self.assertRaises(OCIO.Exception):
-                    ott = self.cs.getTransform(
-                        direction)
-            else:
-                ott = self.cs.getTransform(direction)
-                self.assertFalse(ott.isEditable())
-                self.assertIsInstance(ott, OCIO.LogTransform)
-                self.assertEquals(transform_base, ott.getBase())
+        # Wrong type tests
+        for i in range(0, 10):
+            name = generate_name(20)
+            with self.assertRaises(TypeError):
+                cs.setBitDepth(name)
+        with self.assertRaises(TypeError):
+            cs.setBitDepth(None)
 
     def test_category(self):
         """
@@ -242,11 +120,13 @@ class ColorSpaceTest(unittest.TestCase):
         getCategories() and clearCategories() methods.
         """
 
+        cs = OCIO.ColorSpace()
+
         # Test empty categories
-        self.assertFalse(self.cs.hasCategory('ocio'))
-        self.assertEqual(len(self.cs.getCategories()), 0)
+        self.assertFalse(cs.hasCategory('ocio'))
+        self.assertEqual(len(cs.getCategories()), 0)
         with self.assertRaises(IndexError):
-            self.cs.getCategories()[0]
+            cs.getCategories()[0]
 
         # Test with categories with defined and random string
         categories = ['render', 'input', 'ocio', 'test']
@@ -254,26 +134,26 @@ class ColorSpaceTest(unittest.TestCase):
             categories.append(generate_name(20))
 
         for y in categories:
-            self.cs.addCategory(y)
-            self.assertTrue(self.cs.hasCategory(y))
+            cs.addCategory(y)
+            self.assertTrue(cs.hasCategory(y))
 
-        for j, i in enumerate(self.cs.getCategories()):
+        for j, i in enumerate(cs.getCategories()):
             self.assertEqual(i, categories[j])
 
-        self.assertEqual(len(self.cs.getCategories()), 8)
+        self.assertEqual(len(cs.getCategories()), 8)
 
-        iterator = self.cs.getCategories()
+        iterator = cs.getCategories()
         for a in categories:
             self.assertEqual(a, next(iterator))
-        self.cs.clearCategories()
-        self.assertEqual(len(self.cs.getCategories()), 0)
+        cs.clearCategories()
+        self.assertEqual(len(cs.getCategories()), 0)
 
         for y in categories:
-            self.assertEqual(len(self.cs.getCategories()), 0)
-            self.cs.addCategory(y)
-            self.assertEqual(len(self.cs.getCategories()), 1)
-            self.cs.removeCategory(y)
-        self.assertEqual(len(self.cs.getCategories()), 0)
+            self.assertEqual(len(cs.getCategories()), 0)
+            cs.addCategory(y)
+            self.assertEqual(len(cs.getCategories()), 1)
+            cs.removeCategory(y)
+        self.assertEqual(len(cs.getCategories()), 0)
 
     def test_config(self):
         """
@@ -299,7 +179,6 @@ class ColorSpaceTest(unittest.TestCase):
 
         to_ref = cs.getTransform(OCIO.COLORSPACE_DIR_TO_REFERENCE)
         transforms = to_ref.getTransforms()
-        self.assertIsInstance(transforms, OCIO.GroupTransform)
         self.assertEqual(len(transforms), 3)
 
         exp_transform = transforms[0]
@@ -345,3 +224,160 @@ class ColorSpaceTest(unittest.TestCase):
         self.assertEqual(cs.getEqualityGroup(), 'input')
         self.assertEqual(cs.getBitDepth(), OCIO.BIT_DEPTH_F32)
         self.assertFalse(cs.isData())
+
+    def test_data(self):
+        """
+        Test the setIsData() and getIsData() methods.
+        """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setIsData(True)
+
+        cs = OCIO.ColorSpace()
+
+        # Boolean tests
+        is_datas = [True, False]
+        for is_data in is_datas:
+            cs.setIsData(is_data)
+            self.assertEqual(is_data, cs.isData())
+
+        # Wrong type tests
+        wrong_is_datas = [['test'],
+                          'test']
+        for wrong_is_data in wrong_is_datas:
+            with self.assertRaises(TypeError):
+                cs.setIsData(wrong_is_data)
+
+    def test_description(self):
+        """
+        Test the setDescription() and getDescription() methods.
+        """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setDescription('this is a test')
+
+        cs = OCIO.ColorSpace()
+
+        # Random string tests
+        for i in range(1, 10):
+            name = generate_name(20)
+            cs.setDescription(name)
+            self.assertEqual(name, cs.getDescription())
+
+    def test_editable(self):
+        """
+        Test the isEditable() and createEditableCopy() methods.
+        """
+
+        cs = OCIO.ColorSpace()
+
+        # Getter check
+        cs.setTransform(ColorSpaceTest.main_lt,
+                        OCIO.COLORSPACE_DIR_TO_REFERENCE)
+        ott = cs.getTransform(OCIO.COLORSPACE_DIR_TO_REFERENCE)
+        self.assertFalse(ott.isEditable())
+        with self.assertRaises(OCIO.Exception):
+            ott.setBase(20)
+
+        cs_copy = cs.createEditableCopy()
+        self.assertTrue(cs_copy.isEditable())
+        self.assertIsInstance(cs_copy, OCIO.ColorSpace)
+        self.assertIsNot(cs_copy, cs)
+
+    def test_equality(self):
+        """
+        Test the setEqualityGroup() and getEqualityGroup() methods.
+        """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setEqualityGroup('match1')
+
+        cs = OCIO.ColorSpace()
+
+        # Random string tests
+        for i in range(1, 10):
+            name = generate_name(20)
+            cs.setEqualityGroup(name)
+            self.assertEqual(name, cs.getEqualityGroup())
+
+    def test_family(self):
+        """
+        Test the setFamily() and getFamily() methods.
+        """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setFamily('fam1')
+
+        cs = OCIO.ColorSpace()
+
+        # Random string tests
+        for i in range(1, 10):
+            name = generate_name(20)
+            cs.setFamily(name)
+            self.assertEqual(name, cs.getFamily())
+
+    def test_name(self):
+        """
+        Test the setName() and getName() methods.
+        """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setName('mynewcolspace')
+
+        cs = OCIO.ColorSpace()
+
+        # Random string tests
+        for i in range(1, 10):
+            name = generate_name(20)
+            cs.setName(name)
+            self.assertEqual(name, cs.getName())
+
+    def test_transform(self):
+        """
+        Test the setTransform() and getTransform() methods.
+        """
+
+        # Setup ColorSpaceTest.main_cs
+        ColorSpaceTest.main_cs.setTransform(ColorSpaceTest.main_lt,
+                                            OCIO.COLORSPACE_DIR_TO_REFERENCE)
+
+        cs = OCIO.ColorSpace()
+        lt = OCIO.LogTransform(10)
+
+        # Known constants tests
+        for i, direction in enumerate(
+                OCIO.ColorSpaceDirection.__members__.values()):
+            self.assertEqual(direction.name, OCIO.ColorSpaceDirection(i).name)
+            if direction == OCIO.COLORSPACE_DIR_UNKNOWN:
+                with self.assertRaises(OCIO.Exception):
+                    cs.setTransform(lt, direction)
+            else:
+                cs.setTransform(lt, direction)
+
+            if direction == OCIO.COLORSPACE_DIR_UNKNOWN:
+                with self.assertRaises(OCIO.Exception):
+                    log_transform = cs.getTransform(
+                        direction)
+            else:
+                log_transform = cs.getTransform(direction)
+                self.assertFalse(log_transform.isEditable())
+                self.assertIsInstance(log_transform, OCIO.LogTransform)
+                self.assertEquals(lt.getBase(), log_transform.getBase())
+
+    def test_z_final_colorspace(self):
+        """
+        Test the full ColorSpace.main_cs
+        This test needs to be the last test performed in this TestCase.
+        """
+
+        cs = ColorSpaceTest.main_cs
+
+        self.assertTrue(cs.isEditable())
+        self.assertEqual(cs.getName(), 'mynewcolspace')
+        self.assertEqual(cs.getDescription(), 'this is a test')
+        self.assertEqual(cs.getFamily(), 'fam1')
+        self.assertEqual(cs.getAllocation(), OCIO.ALLOCATION_LG2)
+        self.assertEqual(len(cs.getAllocationVars()), 3)
+        self.assertEqual(cs.getEqualityGroup(), 'match1')
+        self.assertEqual(cs.getBitDepth(), OCIO.BIT_DEPTH_F16)
+        self.assertTrue(cs.isData())
