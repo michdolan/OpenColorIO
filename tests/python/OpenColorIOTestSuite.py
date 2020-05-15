@@ -4,7 +4,6 @@
 import unittest
 import os
 import sys
-from glob import glob
 
 build_location = sys.argv[1]
 
@@ -30,6 +29,18 @@ elif sys.platform == 'darwin':
 sys.path.insert(0, pyopencolorio_dir)
 import PyOpenColorIO as OCIO
 
+import ColorSpaceTest
+import CDLTransformTest
+from MainTest import *
+from ConstantsTest import *
+from ConfigTest import *
+from ContextTest import *
+from LookTest import *
+from GpuShaderDescTest import *
+from Baker import *
+from TransformsTest import *
+from RangeTransformTest import *
+
 def suite():
     """Load unittest.TestCase objects from *Test.py files within ./tests/Python
 
@@ -41,14 +52,26 @@ def suite():
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
 
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    for filename in glob('%s/*Test.py' % this_dir):
-        name = filename.replace('.py', '').split('/')[-1]
-        mod = __import__(name)
-        if mod.__name__ == 'BakerTest':
-            suite.addTest(mod.BakerTest("test_interface", opencolorio_sse))
-        else:
-            suite.addTest(loader.loadTestsFromModule(mod))
+    suite.addTest(loader.loadTestsFromModule(ColorSpaceTest))
+    suite.addTest(loader.loadTestsFromModule(CDLTransformTest))
+    suite.addTest(MainTest("test_interface"))
+    suite.addTest(ConstantsTest("test_interface"))
+    suite.addTest(ConfigTest("test_interface"))
+    suite.addTest(ConfigTest("test_is_editable"))
+    suite.addTest(ContextTest("test_interface"))
+    suite.addTest(LookTest("test_interface"))
+    suite.addTest(RangeTransformTest("test_interface"))
+    suite.addTest(RangeTransformTest("test_equality"))
+    suite.addTest(RangeTransformTest("test_validation"))
+    suite.addTest(TransformsTest("test_interface"))
+
+    # Processor
+    # ProcessorMetadata
+    suite.addTest(GpuShaderDescTest("test_interface"))
+    suite.addTest(BakerTest("test_interface", opencolorio_sse))
+    # PackedImageDesc
+    # PlanarImageDesc
+
     return suite
 
 
