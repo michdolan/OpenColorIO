@@ -5,7 +5,7 @@
 #
 # Variables defined by this module:
 #   OpenEXR_FOUND - If FALSE, do not try to link to openexr
-#   OpenEXR_LIBRARY - OpenEXR library to link to
+#   OpenEXR_LIBRARIES - OpenEXR and IlmBase libraries to link to
 #   OpenEXR_INCLUDE_DIR - Where to find OpenEXR and IlmBase headers
 #   OpenEXR_VERSION - The version of the library
 #
@@ -35,26 +35,48 @@ set(_OpenEXR_LIB_VER "${OpenEXR_FIND_VERSION_MAJOR}_${OpenEXR_FIND_VERSION_MINOR
 ### Try to find package ###
 
 if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
-    set(_OpenEXR_REQUIRED_VARS OpenEXR_LIBRARY)
+    set(_OpenEXR_REQUIRED_VARS OpenEXR_LIBRARIES)
 
     if(NOT DEFINED OpenEXR_ROOT)
-        # Search for IlmBaseConfig.cmake
-        find_package(IlmBase ${OpenEXR_FIND_VERSION} CONFIG QUIET)
+        # Search for OpenEXRConfig.cmake
+        find_package(OpenEXR ${OpenEXR_FIND_VERSION} CONFIG QUIET)
     endif()
 
     if(OpenEXR_FOUND)
-        get_target_property(OpenEXR_LIBRARY IlmBase::OpenEXR LOCATION)
+        get_target_property(IlmImf_LIBRARY OpenEXR::IlmImf LOCATION)
+        get_target_property(IlmImfUtil_LIBRARY OpenEXR::IlmImfUtil LOCATION)
+        get_target_property(Half_LIBRARY IlmBase::Half LOCATION)
+        get_target_property(Iex_LIBRARY IlmBase::Iex LOCATION)
+        get_target_property(IexMath_LIBRARY IlmBase::IexMath LOCATION)
+        get_target_property(IlmThread_LIBRARY IlmBase::IlmThread LOCATION)
+        get_target_property(Imath_LIBRARY IlmBase::Imath LOCATION)
+
+
+
+
+        get_target_property(IMATH_INCLUDES Imath::Imath INTERFACE_INCLUDE_DIRECTORIES)
+        get_target_property(ILMBASE_INCLUDES Imath::Imath INTERFACE_INCLUDE_DIRECTORIES)
+        get_target_property(ILMBASE_IMATH_LIBRARY Imath::Imath INTERFACE_LINK_LIBRARIES)
+        get_target_property(IMATH_LIBRARY Imath::Imath INTERFACE_LINK_LIBRARIES)
+        get_target_property(OPENEXR_IEX_LIBRARY OpenEXR::Iex INTERFACE_LINK_LIBRARIES)
+        get_target_property(OPENEXR_ILMTHREAD_LIBRARY OpenEXR::IlmThread INTERFACE_LINK_LIBRARIES)
+
+
+
+
+
+
     else()
         list(APPEND _OpenEXR_REQUIRED_VARS OpenEXR_INCLUDE_DIR)
 
-        # Search for IlmBase.pc
+        # Search for OpenEXR.pc
         find_package(PkgConfig QUIET)
-        pkg_check_modules(PC_IlmBase QUIET "IlmBase>=${OpenEXR_FIND_VERSION}")
+        pkg_check_modules(PC_OpenEXR QUIET "OpenEXR>=${OpenEXR_FIND_VERSION}")
 
         # Find include directory
         find_path(OpenEXR_INCLUDE_DIR
             NAMES
-                OpenEXR/OpenEXR.h
+                OpenEXR/OpenEXRConfig.h
             HINTS
                 ${OpenEXR_ROOT}
                 ${PC_OpenEXR_INCLUDE_DIRS}
@@ -64,22 +86,22 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
         )
 
         # Lib names to search for
-        set(_OpenEXR_LIB_NAMES "OpenEXR-${_OpenEXR_LIB_VER}" OpenEXR)
+        set(_OpenEXR_LIB_NAMES "IlmImf-${_OpenEXR_LIB_VER}" OpenEXR)
         if(BUILD_TYPE_DEBUG)
             # Prefer Debug lib names
-            list(INSERT _OpenEXR_LIB_NAMES 0 "OpenEXR-${_OpenEXR_LIB_VER}_d")
+            list(INSERT _OpenEXR_LIB_NAMES 0 "IlmImf-${_OpenEXR_LIB_VER}_d")
         endif()
 
         if(OpenEXR_STATIC_LIBRARY)
             # Prefer static lib names
             set(_OpenEXR_STATIC_LIB_NAMES 
-                "${CMAKE_STATIC_LIBRARY_PREFIX}OpenEXR-${_OpenEXR_LIB_VER}${CMAKE_STATIC_LIBRARY_SUFFIX}"
-                "${CMAKE_STATIC_LIBRARY_PREFIX}OpenEXR${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                "${CMAKE_STATIC_LIBRARY_PREFIX}IlmImf-${_OpenEXR_LIB_VER}${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                "${CMAKE_STATIC_LIBRARY_PREFIX}IlmImf${CMAKE_STATIC_LIBRARY_SUFFIX}"
             )
             if(BUILD_TYPE_DEBUG)
                 # Prefer static Debug lib names
                 list(INSERT _OpenEXR_STATIC_LIB_NAMES 0
-                    "${CMAKE_STATIC_LIBRARY_PREFIX}OpenEXR-${_OpenEXR_LIB_VER}_d${CMAKE_STATIC_LIBRARY_SUFFIX}")
+                    "${CMAKE_STATIC_LIBRARY_PREFIX}IlmImf-${_OpenEXR_LIB_VER}_d${CMAKE_STATIC_LIBRARY_SUFFIX}")
             endif()
         endif()
 
@@ -97,10 +119,10 @@ if(NOT OCIO_INSTALL_EXT_PACKAGES STREQUAL ALL)
 
         # Get version from config header file
         if(OpenEXR_INCLUDE_DIR)
-            if(EXISTS "${OpenEXR_INCLUDE_DIR}/OpenEXR/IlmBaseConfig.h")
-                set(_OpenEXR_CONFIG "${OpenEXR_INCLUDE_DIR}/OpenEXR/IlmBaseConfig.h")
-            elseif(EXISTS "${OpenEXR_INCLUDE_DIR}/OpenEXR/OpenEXRConfig.h")
+            if(EXISTS "${OpenEXR_INCLUDE_DIR}/OpenEXR/OpenEXRConfig.h")
                 set(_OpenEXR_CONFIG "${OpenEXR_INCLUDE_DIR}/OpenEXR/OpenEXRConfig.h")
+            elseif(EXISTS "${OpenEXR_INCLUDE_DIR}/OpenEXR/IlmBaseConfig.h")
+                set(_OpenEXR_CONFIG "${OpenEXR_INCLUDE_DIR}/OpenEXR/IlmBaseConfig.h")
             endif()
         endif()
 
@@ -133,8 +155,14 @@ endif()
 ###############################################################################
 ### Create target
 
-if (NOT TARGET IlmBase::OpenEXR)
-    add_library(IlmBase::OpenEXR UNKNOWN IMPORTED GLOBAL)
+if (NOT TARGET OpenEXR::IlmImf)
+    add_library(OpenEXR::IlmImf     UNKNOWN IMPORTED GLOBAL)
+    add_library(OpenEXR::IlmImfUtil UNKNOWN IMPORTED GLOBAL)
+    add_library(IlmBase::Half       UNKNOWN IMPORTED GLOBAL)
+    add_library(IlmBase::Iex        UNKNOWN IMPORTED GLOBAL)
+    add_library(IlmBase::IexMath    UNKNOWN IMPORTED GLOBAL)
+    add_library(IlmBase::IlmThread  UNKNOWN IMPORTED GLOBAL)
+    add_library(IlmBase::Imath      UNKNOWN IMPORTED GLOBAL)
     set(_OpenEXR_TARGET_CREATE TRUE)
 endif()
 

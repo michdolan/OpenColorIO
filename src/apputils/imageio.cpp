@@ -7,276 +7,359 @@
 #include "OpenEXR/ImathBox.h"
 #include "OpenEXR/ImfChannelList.h"
 #include "OpenEXR/ImfFrameBuffer.h"
-#include "OpenEXR/ImfHeader.h"
 #include "OpenEXR/ImfInputFile.h"
 #include "OpenEXR/ImfOutputFile.h"
+#include "pystring/pystring.h"
+#include "utils/StringUtils.h"
 
 #include "imageio.h"
 
 namespace OCIO_NAMESPACE
 {
 
-namespace{
-
-BitDepth pixelTypeToBitDepth(Imf::PixelType pixelType)
+namespace
 {
-    BitDepth bitDepth;
 
-    switch (pixelType)
+const std::vector<std::string> RgbaChans = { "R", "G", "B", "A" };
+const std::vector<std::string> RgbChans  = { "R", "G", "B" };
+
+std::vector<std::string> GetChannelNames(const ChannelOrdering & chanOrder)
+{
+    switch (chanOrder)
     {
-    case Imf::HALF:
-        bitDepth = BIT_DEPTH_F16;
-        break;
-    case Imf::FLOAT:
-        bitDepth = BIT_DEPTH_F32;
-        break;
-    default:
-        throw Exception("");
+        case CHANNEL_ORDERING_RGBA:
+        case CHANNEL_ORDERING_BGRA:
+        case CHANNEL_ORDERING_ABGR:
+            return RgbaChans;
+        case CHANNEL_ORDERING_RGB:
+        case CHANNEL_ORDERING_BGR:
+            return RgbChans;
     }
 
-    return bitDepth;
+    std::stringstream ss;
+    ss << "Error: Unsupported channel ordering: " << chanOrder;
+    throw Exception(ss.str().c_str());
 }
 
-Imf::PixelType bitDepthToPixelType(BitDepth bitDepth)
+size_t GetNumChannels(const ChannelOrdering & chanOrder)
 {
+    switch (chanOrder)
+    {
+        case CHANNEL_ORDERING_RGBA:
+        case CHANNEL_ORDERING_BGRA:
+        case CHANNEL_ORDERING_ABGR:
+            return 4;
+        case CHANNEL_ORDERING_RGB:
+        case CHANNEL_ORDERING_BGR:
+            return 3;
+    }
+
+    std::stringstream ss;
+    ss << "Error: Unsupported channel ordering: " << chanOrder;
+    throw Exception(ss.str().c_str());
+}
+
+size_t BitDepthToBytes(const BitDepth & bitDepth)
+{
+    switch (bitDepth)
+    {
+        case BIT_DEPTH_F32:    return sizeof(float);
+        case BIT_DEPTH_F16:    return sizeof(half);
+        case BIT_DEPTH_UINT16: return sizeof(uint16_t);
+        case BIT_DEPTH_UINT8:  return sizeof(uint8_t);
+    }
+
+    std::stringstream ss;
+    ss << "Error: Unsupported bit-depth: " << BitDepthToString(bitDepth);
+    throw Exception(ss.str().c_str());
+}
+
+void DeAllocateBuffer(void * & data)
+{
+    delete [](char*)data;
+    data = nullptr;
+}
+
+void ReadOpenEXR(const std::string & filename, ImageIO & img)
+{
+    Imf::InputFile file(filename);
+
+    const Imath::Box2i & dw = file.header().dataWindow();
+    const long width  = (long)(dw.max.x - dw.min.x + 1);
+    const long height = (long)(dw.max.y - dw.min.y + 1);
+
+    const Imf::ChannelList & chanList = file.header().channels();
+
+    // RGB channels are required at a minimum. If channels R, G, and B don't
+    // exist, they will be created and zero filled.
+    ChannelOrdering chanOrder = CHANNEL_ORDERING_RGB;
+
+    // Use RGBA if channel A exists
+    if (chanList.findChannel(RgbaChans[3]))
+    {
+        chanOrder = CHANNEL_ORDERING_RGBA;
+    }
+
+    // Start with the minimum supported bit-depth and increase to match the 
+    // channel with the largest pixel type. UINT (mapping to BIT_DEPTH_UINT32) 
+    // is unsupported.
+    Imf::PixelType = Imf::HALF;
+    BitDepth bitDepth = BIT_DEPTH_F16;
+
+    for (const auto & name : RgbaChans)
+    {
+        Imf::Channel * chan = chanList.findChannel(name);
+        if (chan && chan->type == Imf::FLOAT)
+        {
+            pixelType = Imf::FLOAT;
+            bitDepth = BIT_DEPTH_F32;
+            break;
+        }
+    }
+
+    img.allocate(width, height, chanOrder, bitDepth);
+
+    // Copy existing attributes
+    Imf::Header::ConstIterator attrIt = file.header().begin();
+    for (; attrIt != file.header().end(); attrIt++)
+    {
+        img.getHeader().insert(attrIt->name(), attrIt->attribute());
+    }
+
+    // Copy predefined attributes
+    img.getHeader().dataWindow()         = dw;
+    img.getHeader().displayWindow()      = file.header().displayWindow();
+    img.getHeader().pixelAspectRatio()   = file.header().pixelAspectRatio();
+    img.getHeader().screenWindowCenter() = file.header().screenWindowCenter();
+    img.getHeader().screenWindowWidth()  = file.header().screenWindowWidth();
+    img.getHeader().lineOrder()          = file.header().lineOrder();
+    img.getHeader().compression()        = file.header().compression();
+
+    // Channel names based on above allocated ChannelOrdering
+    std::vector<std::string> chanNames = img.getChannelNames();
+
+    // Read pixels into buffer
+    const size_t x          = (size_t)dw.min.x;
+    const size_t y          = (size_t)dw.min.y;
+    const size_t chanStride = (size_t)img.getChanStrideBytes();
+    const size_t xStride    = (size_t)img.getXStrideBytes();
+    const size_t yStride    = (size_t)img.getYStrideBytes();
+
+    Imf::FrameBuffer frameBuffer;
+
+    for (size_t i = 0; i < chanNames.size(); i++)
+    {
+        frameBuffer.insert(
+            chanNames[i],
+            Imf::Slice(
+                pixelType, 
+                (char *)(img.getData() - x*xStride - y*yStride + i*chanStride),
+                xStride, yStride, 
+                1, 1, 
+                // RGB default to 0.0, A default to 1.0
+                (i == 3 ? 1.0 : 0.0)
+            )
+        );
+    }
+
+    file.setFrameBuffer(frameBuffer);
+    file.readPixels(dw.min.y, dw.max.y);
+}
+
+void WriteOpenEXR(const std::string & filename, 
+                  const ImageIO & img, 
+                  const void * & buffer)
+{
+    const std::vector<std::string> chanNames = img.getChannelNames();
+    const BitDepth bitDepth = img.getBitDepth();
+
     Imf::PixelType pixelType;
 
-    switch (bitDepth)
+    if (bitDepth == BIT_DEPTH_F16)
     {
-    case BIT_DEPTH_F16:
         pixelType = Imf::HALF;
-        break;
-    case BIT_DEPTH_F32:
+    }
+    else if (bitDepth == BIT_DEPTH_F32)
+    {
         pixelType = Imf::FLOAT;
-        break;
-    default:
-        throw Exception("");
+    }
+    else
+    {
+        std::stringstream ss;
+        ss << "Error: Bit-depth " 
+           << BitDepthToString(bitDepth) 
+           << " does not map to a supported OpenEXR pixel type";
+        throw Exception(ss.str().c_str());
     }
 
-    return pixelType;
-}
+    Imf::Header header(img.getHeader());
 
-size_t getPixelBytes(Imf::PixelType pixelType)
-{
-    size_t bytes;
-
-    switch (pixelType)
+    for (const auto & name : chanNames)
     {
-    case Imf::HALF:
-        bytes = sizeof(half);
-        break;
-    case Imf::FLOAT:
-        bytes = sizeof(float);
-        break;
-    default:
-        throw Exception("");
+        header.channels().insert(name, Imf::Channel(pixelType));
     }
 
-    return bytes;
-}
+    Imf::OutputFile file(filename.c_str(), header);
 
-size_t getPixelBytes(BitDepth bitDepth)
-{
-    size_t bytes;
+    const Imath::Box2i & dw = header.dataWindow();
+    const size_t x          = (size_t)dw.min.x;
+    const size_t y          = (size_t)dw.min.y;
+    const size_t chanStride = (size_t)img.getChanStrideBytes();
+    const size_t xStride    = (size_t)img.getXStrideBytes();
+    const size_t yStride    = (size_t)img.getYStrideBytes();
 
-    switch (bitDepth)
+    Imf::FrameBuffer frameBuffer;
+
+    for (size_t i = 0; i < chanNames.size(); i++)
     {
-    case BIT_DEPTH_UINT8:
-        bytes = sizeof(uint8_t);
-        break;
-    case BIT_DEPTH_UINT10:
-    case BIT_DEPTH_UINT12:
-    case BIT_DEPTH_UINT14:
-    case BIT_DEPTH_UINT16:
-        bytes = sizeof(uint16_t);
-        break;
-    case BIT_DEPTH_F16:
-        bytes = sizeof(half);
-        break;
-    case BIT_DEPTH_F32:
-        bytes = sizeof(float);
-        break;
-    default:
-        throw Exception("");
-    }
-
-    return bytes;
-}
-
-ImageInfo getExrImageInfo(const Imf::InputFile & file)
-{
-    ImageInfo info;
-
-    Imf::Header header = file.header();
-
-    Imath::Box2i dataWindow = header.dataWindow();
-    info.x = dataWindow.min.x;
-    info.y = dataWindow.min.y;
-    info.width  = dataWindow.max.x - dataWindow.min.x + 1;
-    info.height = dataWindow.max.y - dataWindow.min.y + 1;
-
-    Imath::Box2i displayWindow = header.displayWindow();
-    info.fullX = displayWindow.min.x;
-    info.fullY = displayWindow.min.y;
-    info.fullWidth  = displayWindow.max.x - displayWindow.min.x + 1;
-    info.fullHeight = displayWindow.max.y - displayWindow.min.y + 1;
-
-    Imf::ChannelList channels = header.channels();
-    Imf::ChannelList::ConstIterator it = channels.begin();
-    for (it; it != channels.end(); it++)
-    {
-        info.channelCount++;
-        info.channels.push_back(
-            { 
-                it.name(), 
-                pixelTypeToBitDepth(it.channel().type) 
-            }
+        frameBuffer.insert(
+            chanNames[i],
+            Imf::Slice(
+                pixelType, 
+                (char *)(img.getData() - x*xStride - y*yStride + i*chanStride),
+                xStride, yStride, 
+                1, 1, 
+                // RGB default to 0.0, A default to 1.0
+                (i == 3 ? 1.0 : 0.0)
+            )
         );
     }
 
-    return info;
-}
-
-ImageInfo getExrImageInfo(const std::string & filename)
-{
-    try
-    {
-        Imf::InputFile file(filename.c_str());
-        return getExrImageInfo(file);
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-    }
-}
-
-bool readExr(const std::string & filename, 
-             const std::vector<std::string> & channelNames, 
-             BitDepth bitDepth, 
-             void * pixels)
-{
-    bool ok = false;
-
-    try
-    {
-        Imf::InputFile file(filename.c_str());
-        ImageInfo info = getExrImageInfo(file);
-
-        Imf::FrameBuffer frameBuffer;
-
-        Imf::PixelType pixelType = bitDepthToPixelType(bitDepth);
-        size_t pixelBytes = getPixelBytes(bitDepth);
-        size_t xStride = pixelBytes * (size_t)info.channelCount;
-        size_t yStride = (size_t)info.width * xStride;
-        char * base = (char *)pixels - info.x * xStride - info.y * yStride;
-
-        size_t channelOffset = 0;
-        for (const auto & channelName : channelNames)
-        {
-            frameBuffer.insert(channelName,
-                               Imf::Slice(pixelType, 
-                                          base + channelOffset, 
-                                          xStride, 
-                                          yStride));
-            channelOffset += pixelBytes;
-        }
-
-        file.setFrameBuffer(frameBuffer);
-        file.readPixels(info.y, info.y + info.height - 1);
-        ok = true;
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-    }
-
-    return ok;
-}
-
-bool writeExr(const std::string & filename, 
-              const ImageInfo & info,
-              BitDepth bitDepth, 
-              const void * pixels)
-{
-    bool ok = false;
-
-    try
-    {
-        Imath::Box2i displayWindow(
-            Imath::V2i(info.fullX, 
-                       info.fullY), 
-            Imath::V2i(info.fullX + info.fullWidth - 1, 
-                       info.fullY + info.fullHeight - 1)
-        );
-        Imath::Box2i dataWindow(
-            Imath::V2i(info.x, 
-                       info.y), 
-            Imath::V2i(info.x + info.width - 1, 
-                       info.y + info.height - 1)
-        );
-        Imf::Header header(displayWindow, dataWindow);
-
-        for (const auto & channel : info.channels)
-        {
-            header.channels().insert(
-                channel.name, 
-                Imf::Channel(bitDepthToPixelType(channel.bitDepth))
-            );
-        }
-
-        Imf::OutputFile file(filename.c_str(), header);
-        Imf::FrameBuffer frameBuffer;
-
-        Imf::PixelType pixelType = bitDepthToPixelType(bitDepth);
-        size_t pixelBytes = getPixelBytes(bitDepth);
-        size_t xStride = pixelBytes * (size_t)info.channelCount;
-        size_t yStride = (size_t)info.width * xStride;
-        char * base = (char *)pixels - info.x * xStride - info.y * yStride;
-
-        size_t channelOffset = 0;
-        for (const auto & channel : info.channels)
-        {
-            frameBuffer.insert(channel.name,
-                               Imf::Slice(pixelType, 
-                                          base + channelOffset, 
-                                          xStride, 
-                                          yStride));
-            channelOffset += pixelBytes;
-        }
-
-        file.setFrameBuffer(frameBuffer);
-        file.writePixels(info.height);
-        ok = true;
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-    }
-
-    return ok;
+    file.setFrameBuffer(frameBuffer);
+    file.writePixels(img.getHeight());
 }
 
 } // namespace
 
-ImageInfo GetImageInfo(const std::string & filename)
+ImageIO::ImageIO(const std::string & filename)
 {
-    return getExrImageInfo(filename);
+    std::string root, ext;
+    pystring::path::splitext(root, ext, filename);
+
+    if (StringUtils::Compare(ext.c_str(), ".exr"))
+    {
+        ReadOpenEXR(filename, this);
+    }
+    else
+    {
+        std::stringstream ss;
+        ss << "Error: Unsupported image file format: " << ext;
+        throw Exception(ss.str().c_str());
+    }
 }
 
-bool ReadImage(const std::string & filename, 
-               const std::vector<std::string> & channelNames, 
-               BitDepth bitDepth, 
-               void * pixels)
+ImageIO::ImageIO(long width, long height, 
+                 ChannelOrdering chanOrder, 
+                 BitDepth bitDepth)
 {
-    return readExr(filename, channelNames, bitDepth, pixels);
+    allocate(width, height, chanOrder, bitDepth);
 }
 
-bool WriteImage(const std::string & filename, 
-                const ImageInfo & info,
-                BitDepth bitDepth, 
-                const void * pixels)
+ImageIO::ImageIO(const ImageIO & img)
 {
-    return writeExr(filename, info, bitDepth, pixels);
+    allocate(img.getWidth(), img.getHeight(), 
+             img.getChannelOrder(), 
+             img.getBitDepth());
+    memcpy(m_data, img.m_data, img.getImageBytes());
+}
+
+ImageIO::~ImageIO()
+{
+    if (m_data != nullptr)
+    {
+        DeAllocateBuffer(m_data);
+        m_data = nullptr;
+    }
+}
+
+ImageIO & ImageIO::operator= (ImageIO && img) noexcept
+{
+    if(this != &img)
+    {
+        DeAllocateBuffer(m_data);
+
+        m_header = img.m_header;
+        m_desc   = img.m_desc;
+        m_data   = img.m_data;
+
+        img.m_data = nullptr;
+    }
+
+    return *this;
+}
+
+void ImageIO::allocate(long width, long height, 
+                       ChannelOrdering chanOrder, 
+                       BitDepth bitDepth)
+{
+    if (m_data != nullptr)
+    {
+        DeAllocateBuffer(m_data);
+    }
+
+    const size_t numChans = GetNumChannels(chanOrder);
+    const size_t bitDepthBytes = BitDepthToBytes(bitDepth);
+    const size_t imgSizeInChars = bitDepthBytes * numChans * (size_t)(width * height);
+    
+    m_data = (void *)new char[imgSizeInChars];
+
+    const ptrdiff_t chanStrideBytes = (ptrdiff_t)bitDepthBytes;
+    const ptrdiff_t xStrideBytes    = (ptrdiff_t)numChans * chanStrideBytes;
+    const ptrdiff_t yStrideBytes    = (ptrdiff_t)height * xStrideBytes;
+
+    m_desc = PackedImageDesc(
+        m_data,
+        width, height,
+        chanOrder,
+        bitDepth,
+        chanStrideBytes,
+        xStrideBytes,
+        yStrideBytes
+    );
+
+    m_header.dataWindow().min.x = 0;
+    m_header.dataWindow().min.y = 0;
+    m_header.dataWindow().max.x = (int)width;
+    m_header.dataWindow().max.y = (int)height;
+
+    m_header.displayWindow().min.x = 0;
+    m_header.displayWindow().min.y = 0;
+    m_header.displayWindow().max.x = (int)width;
+    m_header.displayWindow().max.y = (int)height;
+}
+
+void ImageIO::write(const std::string & filename) const
+{
+    std::string root, ext;
+    pystring::path::splitext(root, ext, filename);
+
+    if (StringUtils::Compare(ext.c_str(), ".exr"))
+    {
+        WriteOpenEXR(filename, this);
+    }
+    else
+    {
+        std::stringstream ss;
+        ss << "Error: Unsupported image file format: " << ext;
+        throw Exception(ss.str().c_str());
+    }
+}
+
+const std::vector<std::string> ImageIO::getChannelNames() const
+{
+    if (m_desc.getNumChannels() == 3)
+    {
+        return RgbChans;
+    }
+    else
+    {
+        return RgbaChans;
+    }
+}
+
+ptrdiff_t ImageIO::getImageBytes() const
+{
+    return m_desc.getYStrideBytes() * (ptrdiff_t)(m_desc.getHeight());
 }
 
 } // namespace OCIO_NAMESPACE

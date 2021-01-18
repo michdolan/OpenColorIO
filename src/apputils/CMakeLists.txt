@@ -20,6 +20,7 @@ target_link_libraries(apputils
 		IlmBase::Half
 		IlmBase::Imath
 		OpenEXR::IlmImf
+		pystring::pystring
 )
 
 set_target_properties(apputils PROPERTIES 
